@@ -7,16 +7,15 @@ import re
 
 def main():
     parser = argparse.ArgumentParser(description="Perform unsupervised clustering on the RNA interactome.")
-    parser.add_argument('--interaction_file', required=True, help="Path to the final interaction file with MC stats.")
-    parser.add_argument('--annotation_file', required=True, help="Path to the comprehensive annotation file.")
-    parser.add_argument('--output_prefix', required=True, help="Prefix for output files (e.g., plots, cluster lists).")
+    parser.add_argument('--interaction_file', required=True, help="Final interaction file with MC stats.")
+    parser.add_argument('--annotation_file', required=True, help="Comprehensive annotation file.")
+    parser.add_argument('--output_prefix', required=True, help="Prefix for output files.")
     args = parser.parse_args()
 
     print("Reading and filtering interaction data...")
     interactions_df = pd.read_csv(args.interaction_file)
+    annotation_df = pd.read_csv(args.annotation_file)
     
-    # This is a placeholder for the full filtering logic from your notebook.
-    # A complete script would include filters for counts, feature types, distance, etc.
     filtered_df = interactions_df[interactions_df['counts'] >= 5]
 
     rna_list = sorted(list(set(filtered_df['ref']).union(set(filtered_df['target']))))
@@ -25,7 +24,7 @@ def main():
     print("Creating sparse interaction matrix...")
     row_indices = filtered_df['ref'].map(rna_to_idx)
     col_indices = filtered_df['target'].map(rna_to_idx)
-    data = filtered_df['adjusted_score'].astype(float) # Using adjusted_score as in your notebook
+    data = filtered_df['adjusted_score'].astype(float)
     
     interaction_matrix_sparse = csr_matrix(
         (np.concatenate([data, data]), (np.concatenate([row_indices, col_indices]), np.concatenate([col_indices, row_indices]))),
@@ -46,8 +45,8 @@ def main():
     clusters_df.to_csv(f"{args.output_prefix}_rna_clusters.csv")
     adata.write(f"{args.output_prefix}_adata.h5ad")
     
-    # Save the main t-SNE plot
     sc.pl.tsne(adata, color='leiden', save=f"_{args.output_prefix}_leiden.pdf", show=False)
 
 if __name__ == "__main__":
     main()
+
