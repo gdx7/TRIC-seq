@@ -63,7 +63,7 @@ python Configuration_model.py \
   --simulations 1000000
 ```
 
-*Note: This script can be computationally intensive.*
+*Note: This script is computationally intensive and is written to leverage a GPU.*
 
 ---
 
