@@ -1,45 +1,57 @@
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
+import os, glob
 import argparse
+from tqdm import tqdm
 
-# Attempt to import cupy, fall back to numpy if not available
-try:
-    import cupy as cp
-    print("CuPy found, using GPU for simulation.")
-    GPU_AVAILABLE = True
-except ImportError:
-    print("CuPy not found, using NumPy for simulation (will be slower).")
-    cp = np
-    GPU_AVAILABLE = False
+def load_contacts(p):
+    if p.endswith('.bed'):
+        return pd.read_csv(p, sep='\t', header=None, usecols=[1,2], names=['C1','C2'])
+    return pd.read_csv(p, header=None, usecols=[0,1], names=['C1','C2'])
 
 def main():
-    parser = argparse.ArgumentParser(description="Run Monte Carlo simulation (configuration model) on interaction data.")
-    parser.add_argument('--input_file', required=True, help="Path to the interaction analysis file from Step 2.")
-    parser.add_argument('--annotations', required=True, help="Path to the annotation file.")
-    parser.add_argument('--output_file', required=True, help="Path for the output file with statistical significance.")
-    parser.add_argument('--simulations', type=int, default=1000000, help="Number of Monte Carlo simulations to run.")
+    parser = argparse.ArgumentParser(description="Calculate Gini coefficient for RNA features.")
+    parser.add_argument('--annotations', required=True, help="Comprehensive annotation file.")
+    parser.add_argument('--interactions_dir', required=True, help="Directory with chimeric read files.")
+    parser.add_argument('--output_file', required=True, help="Output CSV with Gini scores.")
+    parser.add_argument('--flank', type=int, default=5000, help="Genomic distance for long-range interactions.")
     args = parser.parse_args()
 
-    print("Loading annotations and observed interaction counts...")
-    annotations = pd.read_csv(args.annotations)
-    rna_to_coords = {row['RNA']: (row['Start'], row['End']) for _, row in annotations.iterrows()}
-    interaction_counts_df = pd.read_csv(args.input_file)
+    anno = pd.read_csv(args.annotations)
+    genes_all = anno[anno['Type'].isin(['CDS', 'ncRNA'])].copy()
 
-    # This is a placeholder for the full simulation logic from your notebook.
-    # A complete script would include filtering, stub list creation, the simulation loop,
-    # and merging results back into the main dataframe.
-    
-    print("Running configuration model simulation...")
-    # Placeholder for simulation results
-    final_df = interaction_counts_df.copy()
-    final_df['expected_count'] = np.nan
-    final_df['p_value'] = np.nan
-    final_df['odds_ratio'] = np.nan
+    paths = glob.glob(os.path.join(args.interactions_dir, '*.bed')) + glob.glob(os.path.join(args.interactions_dir, '*.csv'))
+    all_contacts = pd.concat([load_contacts(p) for p in paths], ignore_index=True)
 
-    # The FDR correction would be a separate, subsequent step.
+    print("Calculating Gini coefficients...")
+    results = []
+    for _, row in tqdm(genes_all.iterrows(), total=len(genes_all)):
+        s, e = row['Start'], row['End']
+        length = e - s + 1
+        counts = np.zeros(length, dtype=int)
+        
+        df = all_contacts[((all_contacts['C1'] >= s) & (all_contacts['C1'] <= e)) | ((all_contacts['C2'] >= s) & (all_contacts['C2'] <= e))]
+        
+        for c1, c2 in zip(df['C1'], df['C2']):
+            if s <= c1 <= e and (c2 < s - args.flank or c2 > e + args.flank):
+                counts[c1 - s] += 1
+            if s <= c2 <= e and (c1 < s - args.flank or c1 > e + args.flank):
+                counts[c2 - s] += 1
+        
+        total = counts.sum()
+        gi = 0.0
+        if total > 0:
+            vals = np.sort(counts)
+            cum = np.cumsum(vals) / total
+            pop = np.linspace(0,1,len(vals))
+            gi = 1 - 2 * np.trapz(cum, pop)
+        
+        results.append({'RNA': row['RNA'], 'N_interactions_long_range': total, 'Gini': gi})
+
+    result_df = pd.DataFrame(results)
+    final_df = pd.merge(genes_all, result_df, on='RNA')
     
-    print(f"Final merged interaction analysis saved to {args.output_file}")
+    print(f"Saved annotations with Gini and counts to {args.output_file}")
     final_df.to_csv(args.output_file, index=False)
 
 if __name__ == "__main__":
