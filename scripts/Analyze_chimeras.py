@@ -41,15 +41,68 @@ def main():
     feature_totals = feature_interactions.groupby('Feature').size().reset_index(name='total_interactions')
     feature_totals_dict = dict(zip(feature_totals['Feature'], feature_totals['total_interactions']))
 
+    print("Calculating self-interactions per feature...")
+    self_interactions_df = df_interactions[df_interactions['Start_Range'] == df_interactions['End_Range']]
+    self_interactions_counts = self_interactions_df.groupby('Start_Range').size().reset_index(name='self_interactions')
+    self_interactions_dict = dict(zip(self_interactions_counts['Start_Range'], self_interactions_counts['self_interactions']))
+
+    total_interactions_in_dataset = df_interactions.shape[0]
+    print(f"Total interactions in the dataset: {total_interactions_in_dataset}")
+
     print("Counting interactions between features...")
-    interaction_counts_df = df_interactions.groupby(['Start_Range', 'End_Range']).size().reset_index(name='counts')
-    interaction_counts_df.rename(columns={'Start_Range': 'ref', 'End_Range': 'target'}, inplace=True)
+    df_interactions['pair'] = df_interactions.apply(lambda row: tuple(sorted([row['Start_Range'], row['End_Range']])), axis=1)
+    symmetric_counts = df_interactions.groupby('pair').size().reset_index(name='counts')
+    symmetric_counts[['sorted_ref', 'sorted_target']] = pd.DataFrame(symmetric_counts['pair'].tolist(), index=symmetric_counts.index)
+    symmetric_counts.drop(columns='pair', inplace=True)
+
+    final_rows = []
+    for _, row in symmetric_counts.iterrows():
+        if row['sorted_ref'] == row['sorted_target']:
+            final_rows.append({'ref': row['sorted_ref'], 'target': row['sorted_target'], 'counts': row['counts']})
+        else:
+            final_rows.append({'ref': row['sorted_ref'], 'target': row['sorted_target'], 'counts': row['counts']})
+            final_rows.append({'ref': row['sorted_target'], 'target': row['sorted_ref'], 'counts': row['counts']})
+    interaction_counts_df = pd.DataFrame(final_rows)
+
+    print("Mapping totals and self-interactions...")
+    interaction_counts_df['totals'] = interaction_counts_df['target'].map(feature_totals_dict)
+    interaction_counts_df['total_ref'] = interaction_counts_df['ref'].map(feature_totals_dict)
+    interaction_counts_df['self_interactions_ref'] = interaction_counts_df['ref'].map(self_interactions_dict).fillna(0)
+    interaction_counts_df['self_interactions_target'] = interaction_counts_df['target'].map(self_interactions_dict).fillna(0)
+
+    print("Calculating enrichment scores...")
+    interaction_counts_df['score'] = (interaction_counts_df['counts'] * total_interactions_in_dataset) / \
+                                     (interaction_counts_df['totals'] * interaction_counts_df['total_ref'])
+    interaction_counts_df['score'] = interaction_counts_df['score'].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    interaction_counts_df['adjusted_totals'] = interaction_counts_df['totals'] - interaction_counts_df['self_interactions_target']
+    interaction_counts_df['adjusted_total_ref'] = interaction_counts_df['total_ref'] - interaction_counts_df['self_interactions_ref']
+    interaction_counts_df['adjusted_totals'] = interaction_counts_df['adjusted_totals'].apply(lambda x: x if x > 0 else np.nan)
+    interaction_counts_df['adjusted_total_ref'] = interaction_counts_df['adjusted_total_ref'].apply(lambda x: x if x > 0 else np.nan)
     
-    # This is a placeholder for the full scoring logic from your notebook.
-    # A complete script would include self-interaction counts, score calculations, etc.
+    interaction_counts_df['adjusted_score'] = (interaction_counts_df['counts'] * total_interactions_in_dataset) / \
+                                              (interaction_counts_df['adjusted_totals'] * interaction_counts_df['adjusted_total_ref'])
+    interaction_counts_df['adjusted_score'] = interaction_counts_df['adjusted_score'].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    print("Adding feature types...")
+    feature_type_dict = dict(zip(df_annotations['RNA'], df_annotations['Type']))
+    interaction_counts_df['ref_type'] = interaction_counts_df['ref'].map(feature_type_dict)
+    interaction_counts_df['target_type'] = interaction_counts_df['target'].map(feature_type_dict)
+
+    self_interaction_rows = interaction_counts_df['ref'] == interaction_counts_df['target']
+    interaction_counts_df['self_interaction_score'] = np.nan
+    interaction_counts_df.loc[self_interaction_rows, 'self_interaction_score'] = \
+        interaction_counts_df.loc[self_interaction_rows, 'self_interactions_ref'] / \
+        (interaction_counts_df.loc[self_interaction_rows, 'totals'] - interaction_counts_df.loc[self_interaction_rows, 'self_interactions_ref'])
+    interaction_counts_df['self_interaction_score'] = interaction_counts_df['self_interaction_score'].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    final_df = interaction_counts_df[['ref', 'target', 'counts', 'total_ref', 'totals', 'score',
+                                      'adjusted_score', 'ref_type', 'target_type', 'self_interaction_score']]
+    
+    final_df = final_df.sort_values(by=['adjusted_score', 'score'], ascending=False)
     
     print(f"Interaction analysis saved to {args.output}")
-    interaction_counts_df.to_csv(args.output, index=False)
+    final_df.to_csv(args.output, index=False)
 
 if __name__ == "__main__":
     main()
