@@ -93,4 +93,3 @@ python Scanpy_clustering.py \
   --output_prefix <your_prefix>
 ```
 
-This will generate several output files, including `rna_clusters.csv` (cluster assignments) and various PDF plots.
