@@ -30,9 +30,9 @@ Plus a JSON sidecar with run metadata (versions, seeds, checksums, params).
 Usage
 -----
 python tricseq_analyze_chimeras.py \
-  --chimera-bed data/EC/RX22GD7_chim.bed \
-  --annotations data/MX/annotations_MX.csv \
-  --out data/EC/analysis_RX22GD7.csv \
+  --chimera-bed path/to/chimeras.bed \
+  --annotations path/to/annotations.csv \
+  --out path/to/output.csv \
   --ann-cols range startpos endpos Type \
   --bed-one-based 0 \
   --ann-one-based 1 \
