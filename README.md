@@ -60,7 +60,7 @@ conda install -c bioconda viennarna -y
 # (or system packages / pip wheel where available)
 ```
 
-Alternatively, if you maintain `requirements.txt`:
+Alternatively, use `requirements.txt`:
 ```bash
 pip install -r requirements.txt
 ```
