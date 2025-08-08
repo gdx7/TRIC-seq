@@ -1,14 +1,29 @@
-pandas
+# TRIC-seq analysis requirements
+
+# Core numerics
 numpy
-biopython
-intervaltree
+pandas
 scipy
-scanpy
-viennarna
-seaborn
+
+# Plotting
 matplotlib
-scikit-learn
-cupy-cuda11x
-leidenalg
-umap-learn
+seaborn
+
+# Utilities
 tqdm
+
+# Feature mapping & bio I/O
+intervaltree
+biopython
+
+# Clustering stack
+scanpy
+anndata
+umap-learn
+scikit-learn
+igraph
+leidenalg
+
+# Optional extras (install manually if needed)
+# viennarna    # for tricseq_ssrna_maxima_longrange.py (RNA folding)
+# cupy-cuda12x # GPU accel for tricseq_configuration_model.py (pick wheel matching your CUDA)
